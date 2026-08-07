@@ -257,6 +257,10 @@
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 /* ============ IndexedDB Storage ============ */
 const DB_NAME = 'xingyu-stars-db';
@@ -314,6 +318,10 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2.5));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(0x0a0418, 1);
+// Tone mapping — ACES for cinematic highlight rolloff & richer color response
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(0x0a0418, 0.009);
@@ -361,27 +369,25 @@ function buildGalaxy(params) {
   const positions = new Float32Array(N * 3);
   const colors = new Float32Array(N * 3);
   const alphas = new Float32Array(N);
+  const scales = new Float32Array(N);    // per-particle size multiplier
+  const twinkleSeeds = new Float32Array(N); // per-particle twinkle offset
 
   for (let i = 0; i < N; i++) {
     const i3 = i * 3;
     // Radius biased toward mid-ring, with a soft power distribution that
     // trails off gradually near the outer edge (no hard boundary).
-    // Sample rr in [0,1]; then remap so outer values are rarer.
     let rr = Math.random();
-    // Soft outer falloff: cube root pushes samples toward outer, sqrt toward inner.
-    // We want outer to be sparser -> raise to power > 1
     rr = Math.pow(rr, 0.75); // gentle bias inward
 
     // Occasional outliers past the nominal outer edge for a soft haze
     let rNorm = rr;
     if (Math.random() < 0.12) {
-      rNorm = 1 + Math.pow(Math.random(), 2.5) * 0.55; // up to 55% past outer edge
+      rNorm = 1 + Math.pow(Math.random(), 2.5) * 0.55;
     }
 
     const bandBias = 0.5 + 0.5 * Math.sin(rr * Math.PI * 3) * params.gapNoise;
     const r = params.innerRadius + (params.outerRadius - params.innerRadius) * (rNorm * 0.92 + bandBias * 0.08);
     const theta = Math.random() * Math.PI * 2;
-    // Vertical thickness — thinner near outer edge for tapered profile
     const thicknessFall = rNorm > 1 ? Math.max(0, 1 - (rNorm - 1) / 0.55) : 1;
     const yJitter = (Math.random() - 0.5) * (Math.random() - 0.5) * 4 * params.thickness * thicknessFall;
 
@@ -389,7 +395,6 @@ function buildGalaxy(params) {
     positions[i3 + 1] = yJitter;
     positions[i3 + 2] = r * Math.sin(theta);
 
-    // Color: inner ring warmer/brighter, outer cooler/deeper
     const t = Math.min(1, Math.max(0, rNorm));
     const mixed = params.insideColor.clone().lerp(params.outsideColor, t);
     colors[i3    ] = mixed.r;
@@ -398,22 +403,31 @@ function buildGalaxy(params) {
 
     // Per-particle alpha: full inside, fade out gracefully past the nominal edge
     let a;
-    if (rNorm <= 0.85) {
-      a = 1.0;
-    } else if (rNorm <= 1.0) {
-      // gentle inner-to-edge softening
-      a = 1.0 - (rNorm - 0.85) / 0.15 * 0.15;
-    } else {
-      // outlier zone: fade from 0.75 down to ~0.05
-      const k = (rNorm - 1) / 0.55; // 0..1
+    if (rNorm <= 0.85) a = 1.0;
+    else if (rNorm <= 1.0) a = 1.0 - (rNorm - 0.85) / 0.15 * 0.15;
+    else {
+      const k = (rNorm - 1) / 0.55;
       a = Math.max(0.03, 0.75 * Math.pow(1 - k, 2.2));
     }
     alphas[i] = a;
+
+    // Star size class:
+    //   70% tiny (0.55-0.85), 22% medium (0.85-1.2), 8% bright (1.4-2.4)
+    const roll = Math.random();
+    let sScale;
+    if (roll < 0.70)      sScale = 0.55 + Math.random() * 0.30;
+    else if (roll < 0.92) sScale = 0.85 + Math.random() * 0.35;
+    else                  sScale = 1.40 + Math.random() * 1.00;
+    scales[i] = sScale;
+
+    twinkleSeeds[i] = Math.random() * 100.0;
   }
 
   geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   geom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geom.setAttribute('alpha', new THREE.BufferAttribute(alphas, 1));
+  geom.setAttribute('aScale', new THREE.BufferAttribute(scales, 1));
+  geom.setAttribute('aSeed', new THREE.BufferAttribute(twinkleSeeds, 1));
   return geom;
 }
 
@@ -444,19 +458,24 @@ const galaxyMat = new THREE.ShaderMaterial({
     uMap: { value: starTex },
     uSize: { value: 0.13 },
     uPixelRatio: { value: renderer.getPixelRatio() },
+    uTime: { value: 0.0 },
   },
   vertexShader: `
     attribute float alpha;
+    attribute float aScale;
+    attribute float aSeed;
     varying vec3 vColor;
     varying float vAlpha;
     uniform float uSize;
     uniform float uPixelRatio;
+    uniform float uTime;
     void main() {
       vColor = color;
-      vAlpha = alpha;
+      // Twinkle: gentle sinusoidal brightness variation per particle
+      float tw = 0.75 + 0.35 * sin(uTime * 1.3 + aSeed * 6.2831);
+      vAlpha = alpha * tw;
       vec4 mv = modelViewMatrix * vec4(position, 1.0);
-      // size attenuation with distance
-      gl_PointSize = uSize * uPixelRatio * 300.0 / max(-mv.z, 0.1);
+      gl_PointSize = uSize * aScale * uPixelRatio * 300.0 / max(-mv.z, 0.1);
       gl_Position = projectionMatrix * mv;
     }
   `,
@@ -564,9 +583,29 @@ function buildHalo() {
 }
 const halo = new THREE.Points(buildHalo(), new THREE.PointsMaterial({
   size: 0.08, map: starTex, transparent: true, depthWrite: false,
-  blending: THREE.AdditiveBlending, vertexColors: true, opacity: 1.0,
+  blending: THREE.AdditiveBlending, vertexColors: true, opacity: 0.75,
 }));
 scene.add(halo);
+
+/* ============ Post-processing: Bloom + Output ============ */
+const composer = new EffectComposer(renderer);
+composer.setPixelRatio(renderer.getPixelRatio());
+composer.setSize(window.innerWidth, window.innerHeight);
+
+const renderPass = new RenderPass(scene, camera);
+composer.addPass(renderPass);
+
+// UnrealBloomPass args: (resolution, strength, radius, threshold)
+const bloomPass = new UnrealBloomPass(
+  new THREE.Vector2(window.innerWidth, window.innerHeight),
+  0.65,   // strength — how much bloom to add
+  0.55,   // radius   — how wide the glow spreads
+  0.15    // threshold — only pixels brighter than this bloom
+);
+composer.addPass(bloomPass);
+
+const outputPass = new OutputPass();
+composer.addPass(outputPass);
 
 /* ============ Photo Stars (bright special stars) ============ */
 const photoStars = new THREE.Group();
@@ -985,7 +1024,10 @@ function animate() {
     if (hovered) updatePreviewPos();
   }
 
-  renderer.render(scene, camera);
+  // Update shader time for twinkle
+  galaxyMat.uniforms.uTime.value = t;
+
+  composer.render();
 
   frameCount++;
   const now = performance.now();
@@ -1007,6 +1049,7 @@ window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  composer.setSize(window.innerWidth, window.innerHeight);
 });
 
 /* ============ Bootstrap ============ */
