@@ -600,26 +600,45 @@ const photoStarPalette = [
   new THREE.Color('#c3d6ff'),
 ];
 
+// Dedicated crisp core sprite for photo stars — tight bright center, near-zero fuzz
+function makePhotoCoreSprite() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0.00, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.18, 'rgba(255,255,255,0.95)');
+  grad.addColorStop(0.32, 'rgba(255,255,255,0.35)');
+  grad.addColorStop(0.55, 'rgba(255,255,255,0.06)');
+  grad.addColorStop(1.00, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  const tex = new THREE.CanvasTexture(c);
+  tex.needsUpdate = true;
+  return tex;
+}
+const photoCoreTex = makePhotoCoreSprite();
+
 function addPhotoStar(photo) {
   const pos = photoPosition(photo.id);
 
-  // Core sprite - a small bright saturated star
+  // Core — tight bright dot (crisp texture, small size)
   const color = photoStarPalette[photo.id % photoStarPalette.length];
   const coreMat = new THREE.SpriteMaterial({
-    map: starTex, color, transparent: true, depthWrite: false,
+    map: photoCoreTex, color, transparent: true, depthWrite: false,
     blending: THREE.AdditiveBlending, opacity: 1.0,
   });
   const core = new THREE.Sprite(coreMat);
-  core.scale.set(0.28, 0.28, 0.28);
+  core.scale.set(0.26, 0.26, 0.26);
   core.position.copy(pos);
 
-  // Halo glow — soft & modest so it doesn't dominate
+  // Halo — very subtle, using the standard soft sprite for gentle bloom hint
   const glowMat = new THREE.SpriteMaterial({
     map: starTex, color, transparent: true, depthWrite: false,
-    blending: THREE.AdditiveBlending, opacity: 0.28,
+    blending: THREE.AdditiveBlending, opacity: 0.24,
   });
   const glow = new THREE.Sprite(glowMat);
-  glow.scale.set(0.85, 0.85, 0.85);
+  glow.scale.set(0.72, 0.72, 0.72);
   glow.position.copy(pos);
 
   photoStars.add(glow);
@@ -957,9 +976,9 @@ function animate() {
         delete m._newlyAdded;
       }
     }
-    m.core.scale.setScalar(0.28 * target * pulse);
-    m.glow.scale.setScalar(0.85 * target * (0.9 + pulse * 0.15));
-    m.glow.material.opacity = Math.min(0.7, (m.hovered ? 0.5 : 0.28) * glowBoost);
+    m.core.scale.setScalar(0.26 * target * pulse);
+    m.glow.scale.setScalar(0.72 * target * (0.9 + pulse * 0.15));
+    m.glow.material.opacity = Math.min(0.65, (m.hovered ? 0.42 : 0.24) * glowBoost);
   }
 
   // Camera tween
