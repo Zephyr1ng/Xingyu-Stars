@@ -837,6 +837,10 @@ const lightbox = document.getElementById('lightbox');
 const lbImg = document.getElementById('lbImg');
 const lbCap = document.getElementById('lbCap');
 document.getElementById('lbClose').onclick = closeLightbox;
+// Click anywhere on the dim backdrop (outside the photo/buttons) to close the lightbox.
+lightbox.addEventListener('click', (e) => {
+  if (e.target === lightbox) closeLightbox();
+});
 document.getElementById('lbPrev').onclick = () => stepLightbox(-1);
 document.getElementById('lbNext').onclick = () => stepLightbox(1);
 document.getElementById('lbDel').onclick = deleteCurrent;
