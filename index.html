@@ -697,6 +697,23 @@ canvas.addEventListener('click', (e) => {
   }
 });
 
+// Double-click anywhere on the canvas → return to the canonical page-center view.
+canvas.addEventListener('dblclick', (e) => {
+  if (lightbox.classList.contains('show')) return; // ignore while viewing a photo
+  if (focusedMeta) {
+    unfocus();
+    return;
+  }
+  // Already at overview but the user may have dragged / zoomed — recenter smoothly.
+  const dPos = camera.position.distanceToSquared(INITIAL_CAM.pos);
+  const dTgt = controls.target.distanceToSquared(INITIAL_CAM.target);
+  if (dPos < 1e-4 && dTgt < 1e-4) return; // already centered
+  controls.autoRotate = false;
+  tweenCamera(INITIAL_CAM.pos.clone(), INITIAL_CAM.target.clone(), 900, () => {
+    controls.autoRotate = true;
+  });
+});
+
 // Track down->up displacement so drags don't get counted as clicks
 let downX = 0, downY = 0, dragMoved = false;
 canvas.addEventListener('pointerdown', (e) => {
@@ -754,6 +771,11 @@ document.getElementById('lbDel').onclick = deleteCurrent;
 let currentIndex = -1;
 let cameraTween = null;
 let focusedMeta = null;   // the star we've flown into (null = overview)
+// Canonical "page center" pose — always the same, no matter how the user has dragged.
+const INITIAL_CAM = {
+  pos: new THREE.Vector3(0, 3, 14),
+  target: new THREE.Vector3(0, 0, 0),
+};
 const savedCamState = { pos: new THREE.Vector3(), target: new THREE.Vector3() };
 
 function tweenCamera(toPos, toTarget, duration = 1200, onDone) {
@@ -800,11 +822,13 @@ function openPhoto(meta) {
   openLightbox(meta);
 }
 
-// Return to overview (Esc while focused-but-lightbox-closed, or click empty space).
+// Return to overview (double-click, Esc while focused-but-lightbox-closed, etc.).
+// Always fly back to the canonical page-center pose so the whole scene sits centered again,
+// regardless of any dragging the user did before focusing.
 function unfocus() {
   focusedMeta = null;
   controls.enabled = true;
-  tweenCamera(savedCamState.pos.clone(), savedCamState.target.clone(), 900, () => {
+  tweenCamera(INITIAL_CAM.pos.clone(), INITIAL_CAM.target.clone(), 900, () => {
     controls.autoRotate = true;
   });
 }
@@ -939,18 +963,21 @@ function animate() {
   const dt = clock.getDelta();
   const t = clock.elapsedTime;
 
-  // Freeze motion whenever a photo star is under scrutiny (hovered or focused)
-  const frozen = hovered !== null || focusedMeta !== null;
+  // Freeze motion only while the pointer is actually resting on a photo star.
+  // After focusing (first click), the scene keeps rotating as long as nothing is hovered.
+  const frozen = hovered !== null;
 
-  // Resume auto-rotate after idle
+  // Resume auto-rotate after idle. Skip while focused — we don't want the
+  // camera swinging around the star; the scene rotation below is enough.
   if (!controls.autoRotate
       && !frozen
+      && !focusedMeta
       && !cameraTween
       && !lightbox.classList.contains('show')
       && performance.now() - lastPointerMoveTs > AUTO_ROTATE_RESUME_MS) {
     controls.autoRotate = true;
   }
-  if (frozen && controls.autoRotate) controls.autoRotate = false;
+  if ((frozen || focusedMeta) && controls.autoRotate) controls.autoRotate = false;
 
   // Gentle rotation — freeze while hovering a photo star
   if (!frozen && !lightbox.classList.contains('show') && !cameraTween) {
