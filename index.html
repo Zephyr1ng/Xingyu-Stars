@@ -69,30 +69,41 @@
 
   /* Orbit ring — tilted ellipse encircling the photo */
   .preview .orbit {
-    position: absolute; inset: -10px;
+    position: absolute; inset: -14px;
     border-radius: 50%;
-    border: 1px solid rgba(217, 168, 255, 0.4);
+    border: 2px solid rgba(230, 195, 255, 0.85);
     transform: rotateX(72deg);
-    box-shadow: 0 0 22px rgba(217, 168, 255, 0.25) inset,
-                0 0 14px rgba(217, 168, 255, 0.35);
+    box-shadow: 0 0 34px rgba(217, 168, 255, 0.55) inset,
+                0 0 22px rgba(217, 168, 255, 0.75),
+                0 0 46px rgba(255, 200, 240, 0.35);
+  }
+  /* Secondary ring at a different tilt so motion is visible from any angle */
+  .preview .orbit.alt {
+    inset: -18px;
+    border: 1px solid rgba(255, 210, 240, 0.55);
+    transform: rotateX(60deg) rotateZ(38deg);
+    box-shadow: 0 0 18px rgba(255, 200, 240, 0.4);
   }
   .preview .orbit::before,
   .preview .orbit::after {
     content: ''; position: absolute; border-radius: 50%;
-    background: #ffd8f5;
-    box-shadow: 0 0 8px 2px rgba(255, 200, 240, 0.9);
+    background: #ffe1f7;
+    box-shadow: 0 0 12px 3px rgba(255, 200, 240, 1),
+                0 0 22px 6px rgba(217, 168, 255, 0.6);
   }
-  /* Two tiny "moons" on the orbit ring */
+  /* Two tiny "moons" on the orbit ring — bigger, brighter */
   .preview .orbit::before {
-    width: 5px; height: 5px; top: -3px; left: 50%; transform: translateX(-50%);
+    width: 8px; height: 8px; top: -5px; left: 50%; transform: translateX(-50%);
   }
   .preview .orbit::after {
-    width: 4px; height: 4px; bottom: -2px; left: 50%; transform: translateX(-50%);
-    background: #e0c3ff;
+    width: 6px; height: 6px; bottom: -4px; left: 50%; transform: translateX(-50%);
+    background: #e8c9ff;
+    box-shadow: 0 0 10px 2px rgba(217, 168, 255, 0.95),
+                0 0 20px 5px rgba(217, 168, 255, 0.55);
   }
   .preview .frame-wrap {
     position: absolute; inset: 0;
-    animation: previewSpin 22s linear infinite;
+    animation: previewSpin 14s linear infinite;
   }
   @keyframes previewSpin { to { transform: rotate(360deg); } }
 
@@ -229,7 +240,7 @@
 
 <div class="preview" id="preview">
   <div class="halo"></div>
-  <div class="frame-wrap"><div class="orbit"></div></div>
+  <div class="frame-wrap"><div class="orbit"></div><div class="orbit alt"></div></div>
   <div class="frame"><img id="previewImg" alt=""></div>
   <div class="caption" id="previewCap"></div>
 </div>
