@@ -1,0 +1,975 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>星宇之境 · Universe of 星宇</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background: #0a0418; color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+  }
+  #app { position: fixed; inset: 0; }
+  canvas { display: block; }
+
+  /* Top overlay */
+  .top-bar {
+    position: fixed; top: 0; left: 0; right: 0; padding: 20px 28px;
+    display: flex; justify-content: space-between; align-items: center;
+    z-index: 10; pointer-events: none;
+  }
+  .brand {
+    font-size: 20px; font-weight: 300; letter-spacing: 6px;
+    background: linear-gradient(90deg, #d9a8ff, #ff9ecb, #d9a8ff);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    text-shadow: 0 0 24px rgba(217, 168, 255, 0.3);
+  }
+  .actions { display: flex; gap: 10px; pointer-events: auto; }
+  .btn {
+    background: rgba(255, 255, 255, 0.06); backdrop-filter: blur(10px);
+    border: 1px solid rgba(217, 168, 255, 0.3); color: #f0e4ff;
+    padding: 8px 16px; font-size: 13px; letter-spacing: 1px;
+    border-radius: 999px; cursor: pointer; transition: all 0.2s;
+  }
+  .btn:hover { background: rgba(217, 168, 255, 0.15); border-color: rgba(217, 168, 255, 0.6); }
+  .btn input { display: none; }
+
+  /* Hint */
+  .hint {
+    position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+    font-size: 12px; color: rgba(240, 228, 255, 0.5); letter-spacing: 2px;
+    pointer-events: none; z-index: 10;
+  }
+  .hint b { color: rgba(255, 255, 255, 0.85); font-weight: 500; }
+
+  /* Hover preview - pentagram photo */
+  .preview {
+    position: fixed; z-index: 20; pointer-events: none;
+    width: 260px; height: 260px;
+    transform: translate(-50%, -50%) scale(0);
+    transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+    filter: drop-shadow(0 0 30px rgba(217, 168, 255, 0.55));
+  }
+  .preview.show { transform: translate(-50%, -50%) scale(1); }
+  .preview .frame {
+    position: absolute; inset: 0;
+    -webkit-clip-path: url(#starPreview); clip-path: url(#starPreview);
+    background: radial-gradient(circle at 50% 45%, #2a0a4a 0%, #14041f 70%, #0a0212 100%);
+  }
+  .preview .frame img {
+    width: 100%; height: 100%; object-fit: contain;
+    display: block;
+  }
+  .preview .glow {
+    position: absolute; inset: -6px;
+    -webkit-clip-path: url(#starPreview); clip-path: url(#starPreview);
+    background: conic-gradient(from 0deg, #ff9ecb, #d9a8ff, #8ec5ff, #ff9ecb);
+    animation: spinGlow 5s linear infinite;
+    z-index: -1; opacity: 0.55;
+  }
+  @keyframes spinGlow { to { transform: rotate(360deg); } }
+
+  .preview .caption {
+    position: absolute; bottom: -32px; left: 50%; transform: translateX(-50%);
+    font-size: 12px; color: rgba(255,255,255,0.75); letter-spacing: 2px;
+    white-space: nowrap;
+  }
+
+  /* Lightbox */
+  .lightbox {
+    position: fixed; inset: 0; background: rgba(5, 1, 15, 0.92);
+    backdrop-filter: blur(14px); z-index: 100;
+    display: none; align-items: center; justify-content: center;
+    opacity: 0; transition: opacity 0.4s;
+  }
+  .lightbox.show { display: flex; opacity: 1; }
+  .lightbox .stage {
+    position: relative; max-width: 88vw; max-height: 82vh;
+    filter: drop-shadow(0 0 60px rgba(217,168,255,0.5));
+  }
+  .lightbox img {
+    max-width: 88vw; max-height: 82vh;
+    display: block; border-radius: 8px;
+    border: 1px solid rgba(217,168,255,0.35);
+  }
+  .lightbox .lb-btn {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    width: 46px; height: 46px; border-radius: 50%;
+    background: rgba(20, 4, 35, 0.7); color: #fff;
+    border: 1px solid rgba(217,168,255,0.4); cursor: pointer;
+    font-size: 18px; display: grid; place-items: center;
+  }
+  .lightbox .lb-btn:hover { background: rgba(217,168,255,0.25); }
+  .lightbox .prev { left: -60px; }
+  .lightbox .next { right: -60px; }
+  .lightbox .close {
+    position: absolute; top: 20px; right: 22px;
+    width: 40px; height: 40px; border-radius: 50%;
+    background: rgba(20, 4, 35, 0.7); border: 1px solid rgba(217,168,255,0.4);
+    color: #fff; cursor: pointer; font-size: 16px;
+  }
+  .lightbox .del {
+    position: absolute; top: 20px; right: 74px;
+    padding: 8px 14px; border-radius: 999px;
+    background: rgba(60, 8, 20, 0.7); border: 1px solid rgba(255,120,140,0.4);
+    color: #ffd0d8; cursor: pointer; font-size: 12px; letter-spacing: 1px;
+  }
+  .lightbox .cap {
+    position: absolute; bottom: -34px; left: 50%; transform: translateX(-50%);
+    font-size: 12px; color: rgba(240,228,255,0.6); letter-spacing: 3px;
+  }
+
+  /* Perf HUD */
+  .perf {
+    position: fixed; bottom: 20px; right: 22px;
+    font-size: 11px; color: rgba(240,228,255,0.35); letter-spacing: 1px;
+    pointer-events: none; z-index: 10; font-variant-numeric: tabular-nums;
+  }
+
+  /* Loader */
+  .loader {
+    position: fixed; inset: 0; display: grid; place-items: center;
+    background: #0a0418; z-index: 200; transition: opacity 0.6s;
+  }
+  .loader.hide { opacity: 0; pointer-events: none; }
+  .loader .ring {
+    width: 60px; height: 60px; border-radius: 50%;
+    border: 2px solid rgba(217,168,255,0.15);
+    border-top-color: #d9a8ff;
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="loader" id="loader"><div class="ring"></div></div>
+
+<div id="app">
+  <canvas id="scene"></canvas>
+</div>
+
+<div class="top-bar">
+  <div class="brand">星宇之境 · Xingyu</div>
+  <div class="actions">
+    <label class="btn">
+      ✨ 上传
+      <input type="file" id="uploader" accept="image/*" multiple>
+    </label>
+    <button class="btn" id="btnClear">清空</button>
+  </div>
+</div>
+
+<div class="hint">
+  <b>拖动</b> 旋转  ·  <b>滚轮</b> 缩放  ·  <b>悬停</b> 亮星预览  ·  <b>点击</b> 聚焦  ·  <b>再点</b> 打开  ·  <b>Esc</b> 返回
+</div>
+
+<div class="perf" id="perf"></div>
+
+<!-- Pentagram preview mask -->
+<svg width="0" height="0" style="position:absolute;">
+  <defs>
+    <clipPath id="starPreview" clipPathUnits="objectBoundingBox">
+      <path d="M0.5,0.02 L0.605,0.365 L0.968,0.365 L0.675,0.585 L0.79,0.955 L0.5,0.735 L0.21,0.955 L0.325,0.585 L0.032,0.365 L0.395,0.365 Z"/>
+    </clipPath>
+  </defs>
+</svg>
+
+<div class="preview" id="preview">
+  <div class="glow"></div>
+  <div class="frame"><img id="previewImg" alt=""></div>
+  <div class="caption" id="previewCap"></div>
+</div>
+
+<div class="lightbox" id="lightbox">
+  <button class="close" id="lbClose" title="关闭 (Esc)">✕</button>
+  <button class="del" id="lbDel">删除</button>
+  <div class="stage">
+    <button class="lb-btn prev" id="lbPrev">‹</button>
+    <img id="lbImg" alt="">
+    <button class="lb-btn next" id="lbNext">›</button>
+    <div class="cap" id="lbCap"></div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+/* ============ IndexedDB Storage ============ */
+const DB_NAME = 'xingyu-stars-db';
+const STORE = 'photos';
+let dbP = null;
+function openDB() {
+  if (dbP) return dbP;
+  dbP = new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: 'id', autoIncrement: true });
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  return dbP;
+}
+async function dbAdd(rec) {
+  const db = await openDB();
+  return new Promise((res, rej) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    const r = tx.objectStore(STORE).add(rec);
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+}
+async function dbAll() {
+  const db = await openDB();
+  return new Promise((res, rej) => {
+    const tx = db.transaction(STORE, 'readonly');
+    const r = tx.objectStore(STORE).getAll();
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+}
+async function dbDel(id) {
+  const db = await openDB();
+  return new Promise((res, rej) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    const r = tx.objectStore(STORE).delete(id);
+    r.onsuccess = () => res(); r.onerror = () => rej(r.error);
+  });
+}
+async function dbClear() {
+  const db = await openDB();
+  return new Promise((res, rej) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    const r = tx.objectStore(STORE).clear();
+    r.onsuccess = () => res(); r.onerror = () => rej(r.error);
+  });
+}
+
+/* ============ Three.js Scene ============ */
+const canvas = document.getElementById('scene');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2.5));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setClearColor(0x0a0418, 1);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x0a0418, 0.009);
+
+const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 500);
+camera.position.set(0, 3, 14);
+
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.minDistance = 4;
+controls.maxDistance = 28;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.22;
+controls.enablePan = false;
+controls.target.set(0, 0, 0);
+
+/* ============ Star Ring around a Planet (土星环风格) ============ */
+const GALAXY_PARAMS = {
+  count: 10000,
+  innerRadius: 2.9,     // ring inner edge — closer to planet surface (planet R = 2.2)
+  outerRadius: 7.2,     // ring outer edge
+  thickness: 0.28,      // vertical thickness of the ring
+  gapNoise: 0.15,       // gap density variation
+  insideColor: new THREE.Color('#fbf0ff'),
+  outsideColor: new THREE.Color('#a373d8'),
+};
+
+const PLANET_PARAMS = {
+  count: 8500,
+  radius: 2.2,
+  shellJitter: 0.08,
+  innerColor: new THREE.Color('#ffe8fb'),   // warmer core hue
+  outerColor: new THREE.Color('#8a4fc9'),   // deep purple edge
+};
+
+// Tilt the whole system so we see the ring at an angle (Saturn-like)
+const system = new THREE.Group();
+system.rotation.x = -0.35; // ~20°
+scene.add(system);
+
+function buildGalaxy(params) {
+  const N = params.count;
+  const geom = new THREE.BufferGeometry();
+  const positions = new Float32Array(N * 3);
+  const colors = new Float32Array(N * 3);
+  const alphas = new Float32Array(N);
+
+  for (let i = 0; i < N; i++) {
+    const i3 = i * 3;
+    // Radius biased toward mid-ring, with a soft power distribution that
+    // trails off gradually near the outer edge (no hard boundary).
+    // Sample rr in [0,1]; then remap so outer values are rarer.
+    let rr = Math.random();
+    // Soft outer falloff: cube root pushes samples toward outer, sqrt toward inner.
+    // We want outer to be sparser -> raise to power > 1
+    rr = Math.pow(rr, 0.75); // gentle bias inward
+
+    // Occasional outliers past the nominal outer edge for a soft haze
+    let rNorm = rr;
+    if (Math.random() < 0.12) {
+      rNorm = 1 + Math.pow(Math.random(), 2.5) * 0.55; // up to 55% past outer edge
+    }
+
+    const bandBias = 0.5 + 0.5 * Math.sin(rr * Math.PI * 3) * params.gapNoise;
+    const r = params.innerRadius + (params.outerRadius - params.innerRadius) * (rNorm * 0.92 + bandBias * 0.08);
+    const theta = Math.random() * Math.PI * 2;
+    // Vertical thickness — thinner near outer edge for tapered profile
+    const thicknessFall = rNorm > 1 ? Math.max(0, 1 - (rNorm - 1) / 0.55) : 1;
+    const yJitter = (Math.random() - 0.5) * (Math.random() - 0.5) * 4 * params.thickness * thicknessFall;
+
+    positions[i3    ] = r * Math.cos(theta);
+    positions[i3 + 1] = yJitter;
+    positions[i3 + 2] = r * Math.sin(theta);
+
+    // Color: inner ring warmer/brighter, outer cooler/deeper
+    const t = Math.min(1, Math.max(0, rNorm));
+    const mixed = params.insideColor.clone().lerp(params.outsideColor, t);
+    colors[i3    ] = mixed.r;
+    colors[i3 + 1] = mixed.g;
+    colors[i3 + 2] = mixed.b;
+
+    // Per-particle alpha: full inside, fade out gracefully past the nominal edge
+    let a;
+    if (rNorm <= 0.85) {
+      a = 1.0;
+    } else if (rNorm <= 1.0) {
+      // gentle inner-to-edge softening
+      a = 1.0 - (rNorm - 0.85) / 0.15 * 0.15;
+    } else {
+      // outlier zone: fade from 0.75 down to ~0.05
+      const k = (rNorm - 1) / 0.55; // 0..1
+      a = Math.max(0.03, 0.75 * Math.pow(1 - k, 2.2));
+    }
+    alphas[i] = a;
+  }
+
+  geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geom.setAttribute('alpha', new THREE.BufferAttribute(alphas, 1));
+  return geom;
+}
+
+// Round soft sprite for stars — sharp bright core + thin halo (crisp, not fuzzy)
+function makeStarSprite() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0.00, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.10, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.22, 'rgba(255,255,255,0.75)');
+  grad.addColorStop(0.45, 'rgba(255,255,255,0.15)');
+  grad.addColorStop(0.85, 'rgba(255,255,255,0.02)');
+  grad.addColorStop(1.00, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  const tex = new THREE.CanvasTexture(c);
+  tex.needsUpdate = true;
+  return tex;
+}
+
+const starTex = makeStarSprite();
+
+const galaxyGeom = buildGalaxy(GALAXY_PARAMS);
+const galaxyMat = new THREE.ShaderMaterial({
+  uniforms: {
+    uMap: { value: starTex },
+    uSize: { value: 0.13 },
+    uPixelRatio: { value: renderer.getPixelRatio() },
+  },
+  vertexShader: `
+    attribute float alpha;
+    varying vec3 vColor;
+    varying float vAlpha;
+    uniform float uSize;
+    uniform float uPixelRatio;
+    void main() {
+      vColor = color;
+      vAlpha = alpha;
+      vec4 mv = modelViewMatrix * vec4(position, 1.0);
+      // size attenuation with distance
+      gl_PointSize = uSize * uPixelRatio * 300.0 / max(-mv.z, 0.1);
+      gl_Position = projectionMatrix * mv;
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D uMap;
+    varying vec3 vColor;
+    varying float vAlpha;
+    void main() {
+      vec4 tex = texture2D(uMap, gl_PointCoord);
+      gl_FragColor = vec4(vColor, 1.0) * tex * vAlpha;
+      if (gl_FragColor.a < 0.005) discard;
+    }
+  `,
+  transparent: true,
+  depthWrite: false,
+  blending: THREE.AdditiveBlending,
+  vertexColors: true,
+});
+const galaxy = new THREE.Points(galaxyGeom, galaxyMat);
+system.add(galaxy);
+
+/* ============ Central Planet — made of particles ============ */
+function buildPlanet(params) {
+  const N = params.count;
+  const geom = new THREE.BufferGeometry();
+  const positions = new Float32Array(N * 3);
+  const colors = new Float32Array(N * 3);
+
+  const R = params.radius;
+  for (let i = 0; i < N; i++) {
+    const i3 = i * 3;
+    // Uniform on sphere
+    const u = Math.random() * 2 - 1;
+    const theta = Math.random() * Math.PI * 2;
+    const s = Math.sqrt(1 - u * u);
+    // Thin shell — most particles right on surface, some slightly in/out
+    const rMul = 1 + (Math.random() - 0.35) * params.shellJitter;
+    const r = R * rMul;
+
+    positions[i3    ] = r * s * Math.cos(theta);
+    positions[i3 + 1] = r * u;
+    positions[i3 + 2] = r * s * Math.sin(theta);
+
+    // Color mostly by "latitude bands" for a gas-giant vibe
+    const band = 0.5 + 0.5 * Math.sin(u * Math.PI * 2.5 + Math.random() * 0.3);
+    const mixed = params.innerColor.clone().lerp(params.outerColor, 0.35 + band * 0.5);
+    colors[i3    ] = mixed.r;
+    colors[i3 + 1] = mixed.g;
+    colors[i3 + 2] = mixed.b;
+  }
+  geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  return geom;
+}
+
+const planetGeom = buildPlanet(PLANET_PARAMS);
+const planetMat = new THREE.PointsMaterial({
+  size: 0.05,
+  sizeAttenuation: true,
+  map: starTex,
+  transparent: true,
+  depthWrite: false,
+  blending: THREE.AdditiveBlending,
+  vertexColors: true,
+  opacity: 0.85,
+});
+const planet = new THREE.Points(planetGeom, planetMat);
+system.add(planet);
+
+// Soft glow halo around the planet
+const planetGlowMat = new THREE.SpriteMaterial({
+  map: starTex,
+  color: new THREE.Color('#c99bff'),
+  transparent: true,
+  depthWrite: false,
+  blending: THREE.AdditiveBlending,
+  opacity: 0.35,
+});
+const planetGlow = new THREE.Sprite(planetGlowMat);
+planetGlow.scale.set(6.5, 6.5, 1);
+system.add(planetGlow);
+
+// Extra sparse halo of tiny distant stars
+function buildHalo() {
+  const N = 1200;
+  const g = new THREE.BufferGeometry();
+  const pos = new Float32Array(N * 3);
+  const col = new Float32Array(N * 3);
+  for (let i = 0; i < N; i++) {
+    const i3 = i * 3;
+    const r = 25 + Math.random() * 55;
+    const theta = Math.random() * Math.PI * 2;
+    const phi = (Math.random() - 0.5) * Math.PI * 0.9;
+    pos[i3    ] = r * Math.cos(phi) * Math.cos(theta);
+    pos[i3 + 1] = r * Math.sin(phi);
+    pos[i3 + 2] = r * Math.cos(phi) * Math.sin(theta);
+    const shade = 0.5 + Math.random() * 0.5;
+    col[i3    ] = shade;
+    col[i3 + 1] = shade * (0.85 + Math.random() * 0.15);
+    col[i3 + 2] = 1.0;
+  }
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  return g;
+}
+const halo = new THREE.Points(buildHalo(), new THREE.PointsMaterial({
+  size: 0.08, map: starTex, transparent: true, depthWrite: false,
+  blending: THREE.AdditiveBlending, vertexColors: true, opacity: 1.0,
+}));
+scene.add(halo);
+
+/* ============ Photo Stars (bright special stars) ============ */
+const photoStars = new THREE.Group();
+system.add(photoStars);
+const photoStarMeta = []; // { mesh, glow, photo, home:Vector3, phase }
+
+function photoPosition(seedId) {
+  // Deterministic position on the ring (not the planet surface)
+  const rng = mulberry32(seedId * 9301 + 49297);
+  const rr = rng();
+  const r = GALAXY_PARAMS.innerRadius + (GALAXY_PARAMS.outerRadius - GALAXY_PARAMS.innerRadius) * rr;
+  const theta = rng() * Math.PI * 2;
+  const yJitter = (rng() - 0.5) * GALAXY_PARAMS.thickness * 1.2;
+  return new THREE.Vector3(r * Math.cos(theta), yJitter, r * Math.sin(theta));
+}
+
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = a;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+const photoStarPalette = [
+  new THREE.Color('#ffe8fa'),
+  new THREE.Color('#e0c3ff'),
+  new THREE.Color('#ffc3d6'),
+  new THREE.Color('#c3d6ff'),
+];
+
+function addPhotoStar(photo) {
+  const pos = photoPosition(photo.id);
+
+  // Core sprite - a small bright saturated star
+  const color = photoStarPalette[photo.id % photoStarPalette.length];
+  const coreMat = new THREE.SpriteMaterial({
+    map: starTex, color, transparent: true, depthWrite: false,
+    blending: THREE.AdditiveBlending, opacity: 1.0,
+  });
+  const core = new THREE.Sprite(coreMat);
+  core.scale.set(0.28, 0.28, 0.28);
+  core.position.copy(pos);
+
+  // Halo glow — soft & modest so it doesn't dominate
+  const glowMat = new THREE.SpriteMaterial({
+    map: starTex, color, transparent: true, depthWrite: false,
+    blending: THREE.AdditiveBlending, opacity: 0.28,
+  });
+  const glow = new THREE.Sprite(glowMat);
+  glow.scale.set(0.85, 0.85, 0.85);
+  glow.position.copy(pos);
+
+  photoStars.add(glow);
+  photoStars.add(core);
+
+  photoStarMeta.push({
+    core, glow, photo,
+    home: pos.clone(),
+    phase: Math.random() * Math.PI * 2,
+    hovered: false,
+  });
+}
+
+function rebuildPhotoStars(photos) {
+  // remove old
+  for (const m of photoStarMeta) {
+    photoStars.remove(m.core); photoStars.remove(m.glow);
+    m.core.material.dispose(); m.glow.material.dispose();
+  }
+  photoStarMeta.length = 0;
+  for (const p of photos) addPhotoStar(p);
+}
+
+/* ============ Interaction: raycast, hover, click ============ */
+const raycaster = new THREE.Raycaster();
+raycaster.params.Sprite = { threshold: 0 };
+const pointerNdc = new THREE.Vector2();
+const pointerScreen = { x: 0, y: 0, active: false };
+
+let hovered = null; // photoStarMeta entry
+let lastPointerMoveTs = 0;
+const AUTO_ROTATE_RESUME_MS = 2500;
+
+canvas.addEventListener('pointermove', (e) => {
+  pointerScreen.x = e.clientX;
+  pointerScreen.y = e.clientY;
+  pointerScreen.active = true;
+  pointerNdc.x = (e.clientX / window.innerWidth) * 2 - 1;
+  pointerNdc.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  lastPointerMoveTs = performance.now();
+  controls.autoRotate = false;
+});
+canvas.addEventListener('pointerleave', () => {
+  pointerScreen.active = false;
+  lastPointerMoveTs = performance.now();
+});
+
+canvas.addEventListener('click', (e) => {
+  // Suppress click if the pointer moved appreciably (i.e. it was a drag)
+  if (dragMoved) return;
+  if (!hovered) return; // clicks on empty space no longer unfocus; use Esc.
+  if (focusedMeta === hovered) {
+    openPhoto(hovered);
+  } else {
+    focusOn(hovered);
+  }
+});
+
+// Track down->up displacement so drags don't get counted as clicks
+let downX = 0, downY = 0, dragMoved = false;
+canvas.addEventListener('pointerdown', (e) => {
+  downX = e.clientX; downY = e.clientY; dragMoved = false;
+});
+canvas.addEventListener('pointerup', (e) => {
+  if (Math.hypot(e.clientX - downX, e.clientY - downY) > 4) dragMoved = true;
+});
+
+function pickHover() {
+  if (!pointerScreen.active || photoStarMeta.length === 0) return null;
+  raycaster.setFromCamera(pointerNdc, camera);
+  const cores = photoStarMeta.map(m => m.core);
+  const hits = raycaster.intersectObjects(cores, false);
+  if (hits.length === 0) return null;
+  const first = hits[0].object;
+  return photoStarMeta.find(m => m.core === first) || null;
+}
+
+/* ============ Preview popup ============ */
+const preview = document.getElementById('preview');
+const previewImg = document.getElementById('previewImg');
+const previewCap = document.getElementById('previewCap');
+let previewShownFor = null;
+
+function showPreview(meta) {
+  if (previewShownFor === meta) return;
+  previewShownFor = meta;
+  previewImg.src = meta.photo.dataUrl;
+  previewCap.textContent = meta.photo.name || '';
+  preview.classList.add('show');
+}
+function hidePreview() {
+  previewShownFor = null;
+  preview.classList.remove('show');
+}
+function updatePreviewPos() {
+  if (!previewShownFor) return;
+  // offset from cursor
+  const x = pointerScreen.x + 30;
+  const y = pointerScreen.y - 30;
+  preview.style.left = x + 'px';
+  preview.style.top = y + 'px';
+}
+
+/* ============ Camera fly & lightbox ============ */
+const lightbox = document.getElementById('lightbox');
+const lbImg = document.getElementById('lbImg');
+const lbCap = document.getElementById('lbCap');
+document.getElementById('lbClose').onclick = closeLightbox;
+document.getElementById('lbPrev').onclick = () => stepLightbox(-1);
+document.getElementById('lbNext').onclick = () => stepLightbox(1);
+document.getElementById('lbDel').onclick = deleteCurrent;
+
+let currentIndex = -1;
+let cameraTween = null;
+let focusedMeta = null;   // the star we've flown into (null = overview)
+const savedCamState = { pos: new THREE.Vector3(), target: new THREE.Vector3() };
+
+function tweenCamera(toPos, toTarget, duration = 1200, onDone) {
+  const fromPos = camera.position.clone();
+  const fromTarget = controls.target.clone();
+  const start = performance.now();
+  cameraTween = (now) => {
+    const t = Math.min(1, (now - start) / duration);
+    const e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; // easeInOutCubic
+    camera.position.lerpVectors(fromPos, toPos, e);
+    controls.target.lerpVectors(fromTarget, toTarget, e);
+    if (t >= 1) {
+      cameraTween = null;
+      if (onDone) onDone();
+    }
+  };
+}
+
+// First click / auto-upload: fly close to a star, hover the star, do NOT open the photo yet.
+function focusOn(meta) {
+  currentIndex = photoStarMeta.indexOf(meta);
+  if (!focusedMeta) {
+    // remember overview only when leaving it
+    savedCamState.pos.copy(camera.position);
+    savedCamState.target.copy(controls.target);
+  }
+  focusedMeta = meta;
+  controls.autoRotate = false;
+  hidePreview();
+
+  const starPos = new THREE.Vector3();
+  meta.core.getWorldPosition(starPos);
+  const dir = new THREE.Vector3().subVectors(camera.position, starPos).normalize();
+  // Stand back a bit — keep the whole cluster in view, don't dive into the star
+  const camTo = starPos.clone().add(dir.multiplyScalar(6.5));
+  tweenCamera(camTo, starPos.clone(), 1100);
+}
+
+// Second click on a focused star: open the lightbox.
+function openPhoto(meta) {
+  currentIndex = photoStarMeta.indexOf(meta);
+  controls.enabled = false;
+  hidePreview();
+  openLightbox(meta);
+}
+
+// Return to overview (Esc while focused-but-lightbox-closed, or click empty space).
+function unfocus() {
+  focusedMeta = null;
+  controls.enabled = true;
+  tweenCamera(savedCamState.pos.clone(), savedCamState.target.clone(), 900, () => {
+    controls.autoRotate = true;
+  });
+}
+
+function openLightbox(meta) {
+  lbImg.src = meta.photo.dataUrl;
+  lbCap.textContent = meta.photo.name || '';
+  lightbox.classList.add('show');
+}
+
+function stepLightbox(delta) {
+  if (photoStarMeta.length === 0) return;
+  currentIndex = (currentIndex + delta + photoStarMeta.length) % photoStarMeta.length;
+  const meta = photoStarMeta[currentIndex];
+  lbImg.src = meta.photo.dataUrl;
+  lbCap.textContent = meta.photo.name || '';
+}
+
+function closeLightbox() {
+  lightbox.classList.remove('show');
+  controls.enabled = true;
+  // Stay focused on the star (don't fly back). Second Esc / click empty → return.
+}
+
+async function deleteCurrent() {
+  if (currentIndex < 0) return;
+  const meta = photoStarMeta[currentIndex];
+  await dbDel(meta.photo.id);
+  const photos = await dbAll();
+  rebuildPhotoStars(photos);
+  if (photoStarMeta.length === 0) { closeLightbox(); return; }
+  currentIndex = Math.min(currentIndex, photoStarMeta.length - 1);
+  const next = photoStarMeta[currentIndex];
+  lbImg.src = next.photo.dataUrl;
+  lbCap.textContent = next.photo.name || '';
+}
+
+window.addEventListener('keydown', (e) => {
+  if (lightbox.classList.contains('show')) {
+    if (e.key === 'Escape') closeLightbox();
+    else if (e.key === 'ArrowLeft') stepLightbox(-1);
+    else if (e.key === 'ArrowRight') stepLightbox(1);
+    return;
+  }
+  if (e.key === 'Escape' && focusedMeta) {
+    unfocus();
+  }
+});
+
+/* ============ Upload ============ */
+const uploader = document.getElementById('uploader');
+uploader.addEventListener('change', async (e) => {
+  const files = Array.from(e.target.files || []);
+  const newIds = [];
+  for (const f of files) {
+    if (!f.type.startsWith('image/')) continue;
+    if (f.size > 25 * 1024 * 1024) continue;
+    const dataUrl = await fileToDataUrl(f);
+    const id = await dbAdd({ name: f.name, dataUrl, ts: Date.now() });
+    newIds.push(id);
+  }
+  uploader.value = '';
+  const photos = await dbAll();
+  rebuildPhotoStars(photos);
+  if (newIds.length > 0) flyToPhoto(newIds[newIds.length - 1]);
+});
+
+function fileToDataUrl(f) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result);
+    r.onerror = rej;
+    r.readAsDataURL(f);
+  });
+}
+
+document.getElementById('btnClear').addEventListener('click', async () => {
+  if (!confirm('确定清空所有照片吗？此操作不可撤销。')) return;
+  await dbClear();
+  rebuildPhotoStars([]);
+});
+
+// Drag & drop
+document.addEventListener('dragover', (e) => { e.preventDefault(); });
+document.addEventListener('drop', async (e) => {
+  e.preventDefault();
+  const files = Array.from(e.dataTransfer.files || []);
+  const newIds = [];
+  for (const f of files) {
+    if (!f.type.startsWith('image/')) continue;
+    if (f.size > 25 * 1024 * 1024) continue;
+    const dataUrl = await fileToDataUrl(f);
+    const id = await dbAdd({ name: f.name, dataUrl, ts: Date.now() });
+    newIds.push(id);
+  }
+  const photos = await dbAll();
+  rebuildPhotoStars(photos);
+  if (newIds.length > 0) flyToPhoto(newIds[newIds.length - 1]);
+});
+
+/* ============ Fly camera to a newly uploaded photo star ============ */
+function flyToPhoto(photoId) {
+  const meta = photoStarMeta.find(m => m.photo.id === photoId);
+  if (!meta) return;
+  // Save current view before flying — this becomes the "return" point
+  if (!focusedMeta) {
+    savedCamState.pos.copy(camera.position);
+    savedCamState.target.copy(controls.target);
+  }
+  focusedMeta = meta;
+  controls.autoRotate = false;
+  const starPos = new THREE.Vector3();
+  meta.core.getWorldPosition(starPos);
+  // Stand outside the sphere, comfortable framing distance
+  const outward = starPos.clone().normalize().multiplyScalar(GALAXY_PARAMS.radius + 7);
+  tweenCamera(outward, starPos.clone(), 1500, () => {
+    meta._newlyAdded = performance.now();
+  });
+}
+
+/* ============ Perf HUD & adaptive quality ============ */
+const perfEl = document.getElementById('perf');
+let frameCount = 0;
+let lastPerf = performance.now();
+let currentFps = 60;
+
+/* ============ Main animation loop ============ */
+const clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = clock.getDelta();
+  const t = clock.elapsedTime;
+
+  // Freeze motion whenever a photo star is under scrutiny (hovered or focused)
+  const frozen = hovered !== null || focusedMeta !== null;
+
+  // Resume auto-rotate after idle
+  if (!controls.autoRotate
+      && !frozen
+      && !cameraTween
+      && !lightbox.classList.contains('show')
+      && performance.now() - lastPointerMoveTs > AUTO_ROTATE_RESUME_MS) {
+    controls.autoRotate = true;
+  }
+  if (frozen && controls.autoRotate) controls.autoRotate = false;
+
+  // Gentle rotation — freeze while hovering a photo star
+  if (!frozen && !lightbox.classList.contains('show') && !cameraTween) {
+    galaxy.rotation.y += dt * 0.05;      // ring spins around planet
+    photoStars.rotation.y = galaxy.rotation.y; // photo stars co-rotate with ring
+    planet.rotation.y += dt * 0.08;      // planet self-rotation (faster)
+    halo.rotation.y -= dt * 0.003;
+  }
+
+  // Photo star breathing
+  for (const m of photoStarMeta) {
+    const pulse = 0.85 + Math.sin(t * 1.6 + m.phase) * 0.15;
+    let target = m.hovered ? 1.6 : 1.0;
+    let glowBoost = 1.0;
+    // Newly-added pulse: strong beacon for 4 seconds
+    if (m._newlyAdded) {
+      const age = (performance.now() - m._newlyAdded) / 1000;
+      if (age < 4) {
+        const beacon = 1 + Math.sin(age * 8) * 0.5 * Math.max(0, 1 - age / 4);
+        target = Math.max(target, 1.8 * beacon);
+        glowBoost = 2.0;
+      } else {
+        delete m._newlyAdded;
+      }
+    }
+    m.core.scale.setScalar(0.28 * target * pulse);
+    m.glow.scale.setScalar(0.85 * target * (0.9 + pulse * 0.15));
+    m.glow.material.opacity = Math.min(0.7, (m.hovered ? 0.5 : 0.28) * glowBoost);
+  }
+
+  // Camera tween
+  if (cameraTween) cameraTween(performance.now());
+
+  controls.update();
+
+  // Hover pick
+  if (!lightbox.classList.contains('show') && !cameraTween) {
+    const h = pickHover();
+    if (h !== hovered) {
+      if (hovered) hovered.hovered = false;
+      hovered = h;
+      if (hovered) {
+        hovered.hovered = true;
+        showPreview(hovered);
+        canvas.style.cursor = 'pointer';
+      } else {
+        hidePreview();
+        canvas.style.cursor = '';
+      }
+    }
+    if (hovered) updatePreviewPos();
+  }
+
+  renderer.render(scene, camera);
+
+  frameCount++;
+  const now = performance.now();
+  if (now - lastPerf > 1000) {
+    currentFps = Math.round((frameCount * 1000) / (now - lastPerf));
+    perfEl.textContent = currentFps + ' fps · ' + (GALAXY_PARAMS.count) + ' 星';
+    frameCount = 0;
+    lastPerf = now;
+    // adaptive downgrade
+    if (currentFps < 25 && GALAXY_PARAMS.count > 2000) {
+      GALAXY_PARAMS.count = Math.max(2000, Math.floor(GALAXY_PARAMS.count * 0.6));
+      galaxy.geometry.dispose();
+      galaxy.geometry = buildGalaxy(GALAXY_PARAMS);
+    }
+  }
+}
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+/* ============ Bootstrap ============ */
+(async function init() {
+  try {
+    const photos = await dbAll();
+    rebuildPhotoStars(photos);
+  } catch (e) {
+    console.warn('load photos failed', e);
+  }
+  document.getElementById('loader').classList.add('hide');
+  animate();
+})();
+
+</script>
+</body>
+</html>
+
