@@ -141,46 +141,108 @@
 
   /* Lightbox */
   .lightbox {
-    position: fixed; inset: 0; background: rgba(5, 1, 15, 0.92);
-    backdrop-filter: blur(14px); z-index: 100;
+    position: fixed; inset: 0;
+    /* Very light tint so the 3D scene behind stays visible, just dimmed */
+    background: rgba(10, 4, 24, 0.08);
+    /* Blur what's behind — the star scene becomes a soft dreamy backdrop */
+    backdrop-filter: blur(2px) saturate(1.02);
+    -webkit-backdrop-filter: blur(2px) saturate(1.02);
+    z-index: 100;
     display: none; align-items: center; justify-content: center;
-    opacity: 0; transition: opacity 0.4s;
+    opacity: 0; transition: opacity 0.45s ease;
   }
   .lightbox.show { display: flex; opacity: 1; }
+
   .lightbox .stage {
-    position: relative; max-width: 88vw; max-height: 82vh;
-    filter: drop-shadow(0 0 60px rgba(217,168,255,0.5));
+    position: relative; max-width: 82vw; max-height: 78vh;
+    transform: scale(0.94);
+    opacity: 0;
+    transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.4s ease;
   }
+  .lightbox.show .stage { transform: scale(1); opacity: 1; }
+
   .lightbox img {
-    max-width: 88vw; max-height: 82vh;
-    display: block; border-radius: 8px;
-    border: 1px solid rgba(217,168,255,0.35);
+    max-width: 82vw; max-height: 78vh;
+    display: block;
+    /* Feather the real image edges — pixels near the border fade to transparent
+       so the photo dissolves into the background instead of ending on a hard line.
+       No outer glow / halo; the softening is on the photo itself. */
+    /* `closest-side` puts the 100% stop at the nearest edge of the image,
+       so the fade actually reaches the visible edge instead of the far corner. */
+    -webkit-mask-image: radial-gradient(ellipse closest-side at center,
+      #000 55%,
+      rgba(0, 0, 0, 0.88) 72%,
+      rgba(0, 0, 0, 0.5) 85%,
+      rgba(0, 0, 0, 0.18) 95%,
+      rgba(0, 0, 0, 0) 100%);
+            mask-image: radial-gradient(ellipse closest-side at center,
+      #000 55%,
+      rgba(0, 0, 0, 0.88) 72%,
+      rgba(0, 0, 0, 0.5) 85%,
+      rgba(0, 0, 0, 0.18) 95%,
+      rgba(0, 0, 0, 0) 100%);
+    -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+    -webkit-mask-size: 100% 100%; mask-size: 100% 100%;
   }
   .lightbox .lb-btn {
     position: absolute; top: 50%; transform: translateY(-50%);
-    width: 46px; height: 46px; border-radius: 50%;
-    background: rgba(20, 4, 35, 0.7); color: #fff;
-    border: 1px solid rgba(217,168,255,0.4); cursor: pointer;
-    font-size: 18px; display: grid; place-items: center;
+    width: 52px; height: 52px; border-radius: 50%;
+    background: rgba(20, 4, 35, 0.7);
+    backdrop-filter: blur(10px);
+    color: #f0e4ff;
+    border: 1px solid rgba(217, 168, 255, 0.5);
+    cursor: pointer;
+    font-size: 22px; line-height: 1; display: grid; place-items: center;
+    transition: all 0.2s ease;
+    box-shadow: 0 0 20px rgba(217, 168, 255, 0.2);
   }
-  .lightbox .lb-btn:hover { background: rgba(217,168,255,0.25); }
-  .lightbox .prev { left: -60px; }
-  .lightbox .next { right: -60px; }
+  .lightbox .lb-btn:hover {
+    background: rgba(217, 168, 255, 0.28);
+    border-color: rgba(217, 168, 255, 0.9);
+    box-shadow: 0 0 28px rgba(217, 168, 255, 0.55);
+    transform: translateY(-50%) scale(1.08);
+  }
+  .lightbox .prev { left: -72px; }
+  .lightbox .next { right: -72px; }
   .lightbox .close {
-    position: absolute; top: 20px; right: 22px;
-    width: 40px; height: 40px; border-radius: 50%;
-    background: rgba(20, 4, 35, 0.7); border: 1px solid rgba(217,168,255,0.4);
-    color: #fff; cursor: pointer; font-size: 16px;
+    position: absolute; top: 22px; right: 24px;
+    width: 42px; height: 42px; border-radius: 50%;
+    background: rgba(20, 4, 35, 0.7);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(217, 168, 255, 0.5);
+    color: #f0e4ff; cursor: pointer; font-size: 16px;
+    transition: all 0.2s ease;
+  }
+  .lightbox .close:hover {
+    background: rgba(217, 168, 255, 0.28);
+    border-color: rgba(217, 168, 255, 0.9);
+    transform: rotate(90deg);
   }
   .lightbox .del {
-    position: absolute; top: 20px; right: 74px;
-    padding: 8px 14px; border-radius: 999px;
-    background: rgba(60, 8, 20, 0.7); border: 1px solid rgba(255,120,140,0.4);
-    color: #ffd0d8; cursor: pointer; font-size: 12px; letter-spacing: 1px;
+    position: absolute; top: 24px; right: 80px;
+    padding: 9px 16px; border-radius: 999px;
+    background: rgba(60, 8, 20, 0.65);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 120, 140, 0.5);
+    color: #ffd0d8; cursor: pointer; font-size: 12px; letter-spacing: 2px;
+    transition: all 0.2s ease;
+  }
+  .lightbox .del:hover {
+    background: rgba(120, 20, 40, 0.6);
+    border-color: rgba(255, 120, 140, 0.9);
+    color: #fff;
   }
   .lightbox .cap {
-    position: absolute; bottom: -34px; left: 50%; transform: translateX(-50%);
-    font-size: 12px; color: rgba(240,228,255,0.6); letter-spacing: 3px;
+    position: absolute; bottom: -40px; left: 50%; transform: translateX(-50%);
+    font-size: 13px; letter-spacing: 4px;
+    color: rgba(240, 228, 255, 0.75);
+    text-shadow: 0 0 10px rgba(217, 168, 255, 0.5);
+    white-space: nowrap;
+  }
+  @media (max-width: 720px) {
+    .lightbox .prev { left: 8px; }
+    .lightbox .next { right: 8px; }
+    .lightbox .lb-btn { width: 42px; height: 42px; font-size: 18px; }
   }
 
   /* Perf HUD */
